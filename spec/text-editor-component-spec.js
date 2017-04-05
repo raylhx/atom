@@ -1276,6 +1276,9 @@ describe('TextEditorComponent', () => {
       expect(element.contains(item4)).toBe(false)
       expect(element.contains(item5)).toBe(false)
       expect(element.contains(item6)).toBe(false)
+
+      // changing the text
+      throw new Error("WIP: assert making changes to text moves block decorations")
     })
 
     function createBlockDecorationAtScreenRow(editor, screenRow, {height, margin, position}) {
