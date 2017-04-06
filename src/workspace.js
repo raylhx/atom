@@ -36,6 +36,7 @@ module.exports = class Workspace extends Model {
     this.updateDocumentEdited = this.updateDocumentEdited.bind(this)
     this.didDestroyPaneItem = this.didDestroyPaneItem.bind(this)
     this.didChangeActivePaneItem = this.didChangeActivePaneItem.bind(this)
+    this.didChangeActivePane = this.didChangeActivePane.bind(this)
     this.didActivatePaneContainer = this.didActivatePaneContainer.bind(this)
     this.didHideDock = this.didHideDock.bind(this)
 
@@ -80,7 +81,6 @@ module.exports = class Workspace extends Model {
       right: this.createDock('right'),
       bottom: this.createDock('bottom')
     }
-    this.activePaneContainer = this.center
 
     this.panelContainers = {
       top: new PanelContainer({viewRegistry: this.viewRegistry, location: 'top'}),
@@ -100,6 +100,7 @@ module.exports = class Workspace extends Model {
     _.values(this.docks).forEach(dock => {
       dock.initialize()
     })
+    this.didActivatePaneContainer(this.getCenter())
   }
 
   getElement () {
@@ -167,6 +168,7 @@ module.exports = class Workspace extends Model {
       modal: new PanelContainer({viewRegistry: this.viewRegistry, location: 'modal'})
     }
 
+    this.activePaneContainer = null
     this.originalFontSize = null
     this.openers = []
     this.destroyedItemURIs = []
@@ -258,21 +260,53 @@ module.exports = class Workspace extends Model {
     if (paneContainer !== this.getActivePaneContainer()) {
       this.activePaneContainer = paneContainer
       this.emitter.emit('did-change-active-pane-container', this.activePaneContainer)
-      this.didChangeActivePane(paneContainer, paneContainer.getActivePane())
+      if (this.activePaneSubscription) this.activePaneSubscription.dispose()
+      this.activePaneSubscription = paneContainer.observeActivePane(this.didChangeActivePane)
     }
   }
 
-  didChangeActivePane (paneContainer, pane) {
-    if (paneContainer === this.getActivePaneContainer()) {
-      this.emitter.emit('did-change-active-pane', pane)
-      this.didChangeActivePaneItem(pane, pane.getActiveItem())
-    }
+  didChangeActivePane (pane) {
+    this.emitter.emit('did-change-active-pane', pane)
+    if (this.activePaneItemSubscription) this.activePaneItemSubscription.dispose()
+    this.activePaneItemSubscription = pane.observeActiveItem(this.didChangeActivePaneItem)
   }
 
-  didChangeActivePaneItem (pane, item) {
-    if (pane === this.getActivePane()) {
-      this.emitter.emit('did-change-active-pane-item', item)
+  didChangeActivePaneItem (item) {
+    this.updateWindowTitle()
+    this.updateDocumentEdited()
+    if (this.activeItemSubscriptions != null) {
+      this.activeItemSubscriptions.dispose()
     }
+    this.activeItemSubscriptions = new CompositeDisposable()
+
+    let modifiedSubscription, titleSubscription
+
+    if (item != null && typeof item.onDidChangeTitle === 'function') {
+      titleSubscription = item.onDidChangeTitle(this.updateWindowTitle)
+    } else if (item != null && typeof item.on === 'function') {
+      titleSubscription = item.on('title-changed', this.updateWindowTitle)
+      if (titleSubscription == null || typeof titleSubscription.dispose !== 'function') {
+        titleSubscription = new Disposable(() => {
+          item.off('title-changed', this.updateWindowTitle)
+        })
+      }
+    }
+
+    if (item != null && typeof item.onDidChangeModified === 'function') {
+      modifiedSubscription = item.onDidChangeModified(this.updateDocumentEdited)
+    } else if (item != null && typeof item.on === 'function') {
+      modifiedSubscription = item.on('modified-status-changed', this.updateDocumentEdited)
+      if (modifiedSubscription == null || typeof modifiedSubscription.dispose !== 'function') {
+        modifiedSubscription = new Disposable(() => {
+          item.off('modified-status-changed', this.updateDocumentEdited)
+        })
+      }
+    }
+
+    if (titleSubscription != null) { this.activeItemSubscriptions.add(titleSubscription) }
+    if (modifiedSubscription != null) { this.activeItemSubscriptions.add(modifiedSubscription) }
+
+    this.emitter.emit('did-change-active-pane-item', item)
   }
 
   didHideDock () {
@@ -294,44 +328,7 @@ module.exports = class Workspace extends Model {
 
   subscribeToActiveItem () {
     this.project.onDidChangePaths(this.updateWindowTitle)
-    this.onDidChangeActivePaneItem(this.didChangeActivePaneItem)
   }
-
-  // didChangeActivePaneItem (item) {
-  //   this.updateWindowTitle()
-  //   this.updateDocumentEdited()
-  //   if (this.activeItemSubscriptions != null) {
-  //     this.activeItemSubscriptions.dispose()
-  //   }
-  //   this.activeItemSubscriptions = new CompositeDisposable()
-  //
-  //   let modifiedSubscription, titleSubscription
-  //
-  //   if (item != null && typeof item.onDidChangeTitle === 'function') {
-  //     titleSubscription = item.onDidChangeTitle(this.updateWindowTitle)
-  //   } else if (item != null && typeof item.on === 'function') {
-  //     titleSubscription = item.on('title-changed', this.updateWindowTitle)
-  //     if (titleSubscription == null || typeof titleSubscription.dispose !== 'function') {
-  //       titleSubscription = new Disposable(() => {
-  //         item.off('title-changed', this.updateWindowTitle)
-  //       })
-  //     }
-  //   }
-  //
-  //   if (item != null && typeof item.onDidChangeModified === 'function') {
-  //     modifiedSubscription = item.onDidChangeModified(this.updateDocumentEdited)
-  //   } else if (item != null && typeof item.on === 'function') {
-  //     modifiedSubscription = item.on('modified-status-changed', this.updateDocumentEdited)
-  //     if (modifiedSubscription == null || typeof modifiedSubscription.dispose !== 'function') {
-  //       modifiedSubscription = new Disposable(() => {
-  //         item.off('modified-status-changed', this.updateDocumentEdited)
-  //       })
-  //     }
-  //   }
-  //
-  //   if (titleSubscription != null) { this.activeItemSubscriptions.add(titleSubscription) }
-  //   if (modifiedSubscription != null) { this.activeItemSubscriptions.add(modifiedSubscription) }
-  // }
 
   subscribeToAddedItems () {
     this.onDidAddPaneItem(({item, pane, index}) => {
@@ -1313,9 +1310,9 @@ module.exports = class Workspace extends Model {
   // Called by Model superclass when destroyed
   destroyed () {
     this.paneContainer.destroy()
-    if (this.activeItemSubscriptions != null) {
-      this.activeItemSubscriptions.dispose()
-    }
+    if (this.activeItemSubscriptions) this.activeItemSubscriptions.dispose()
+    if (this.activePaneItemSubscription) this.activePaneItemSubscription.dispose()
+    if (this.activePaneSubscription) this.activePaneSubscription.dispose()
   }
 
   /*

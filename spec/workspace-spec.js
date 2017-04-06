@@ -1079,7 +1079,7 @@ describe('Workspace', () => {
   })
 
   describe('pane containers', () => {
-    fffit('maintains the active pane and item globally across active pane containers', () => {
+    it('maintains the active pane and item globally across active pane containers', () => {
       const center = workspace.getCenter()
       const centerItem1 = {element: document.createElement('div')}
       const centerItem2 = {element: document.createElement('div')}
