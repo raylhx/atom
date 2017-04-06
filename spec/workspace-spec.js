@@ -27,6 +27,7 @@ describe('Workspace', () => {
     waits(1)
 
     waitsForPromise(() => atom.workspace.itemLocationStore.clear())
+    runs(() => { atom.workspace.getCenter().activate() })
   })
 
   afterEach(() => temp.cleanupSync())
