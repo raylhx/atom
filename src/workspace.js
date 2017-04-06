@@ -506,7 +506,7 @@ module.exports = class Workspace extends Model {
   // Returns a {Disposable} on which `.dispose()` can be called to unsubscribe.
   observeActivePaneItem (callback) {
     callback(this.getActivePaneItem())
-    return this.onDidChangActivePaneItem(callback)
+    return this.onDidChangeActivePaneItem(callback)
   }
 
   // Essential: Invoke the given callback whenever an item is opened. Unlike
