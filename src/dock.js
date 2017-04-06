@@ -33,6 +33,7 @@ module.exports = class Dock {
     this.deserializerManager = params.deserializerManager
     this.notificationManager = params.notificationManager
     this.viewRegistry = params.viewRegistry
+    this.didActivate = params.didActivate
     this.didHide = params.didHide
 
     this.paneContainer = new PaneContainer({
@@ -96,6 +97,7 @@ module.exports = class Dock {
   activate () {
     this.open()
     this.getActivePane().activate()
+    this.didActivate(this)
   }
 
   open () {

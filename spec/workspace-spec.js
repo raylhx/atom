@@ -1077,6 +1077,54 @@ describe('Workspace', () => {
     })
   })
 
+  describe('pane containers', () => {
+    fffit('maintains the active pane and item globally across active pane containers', () => {
+      const center = workspace.getCenter()
+      const centerItem1 = {element: document.createElement('div')}
+      const centerItem2 = {element: document.createElement('div')}
+      const centerItem3 = {element: document.createElement('div')}
+      center.getActivePane().splitRight()
+      const [centerPane1, centerPane2] = center.getPanes()
+
+      const leftDock = workspace.getLeftDock()
+      const leftItem1 = {element: document.createElement('div')}
+      const leftItem2 = {element: document.createElement('div')}
+      const leftItem3 = {element: document.createElement('div')}
+      leftDock.getActivePane().splitDown()
+      const [leftPane1, leftPane2] = leftDock.getPanes()
+
+      const rightDock = workspace.getLeftDock()
+      const rightItem1 = {element: document.createElement('div')}
+      const rightItem2 = {element: document.createElement('div')}
+      const rightItem3 = {element: document.createElement('div')}
+      rightDock.getActivePane().splitDown()
+      const [rightPane1, rightPane2] = rightDock.getPanes()
+
+      const bottomDock = workspace.getLeftDock()
+      const bottomItem1 = {element: document.createElement('div')}
+      const bottomItem2 = {element: document.createElement('div')}
+      const bottomItem3 = {element: document.createElement('div')}
+      bottomDock.getActivePane().splitRight()
+      const [bottomPane1, bottomPane2] = bottomDock.getPanes()
+
+      const activePaneContainers = []
+      const activePanes = []
+      const activeItems = []
+      workspace.onDidChangeActivePaneContainer((container) => activePaneContainers.push(container))
+      workspace.onDidChangeActivePane((pane) => activePanes.push(pane))
+      workspace.onDidChangeActivePaneItem((item) => activeItems.push(item))
+
+      expect(workspace.getActivePaneContainer()).toBe(center)
+      leftDock.activate()
+      expect(workspace.getActivePaneContainer()).toBe(leftDock)
+      expect(workspace.getActivePane()).toBe(leftDock.getActivePane())
+      expect(workspace.getActivePaneItem()).toBe(leftDock.getActivePaneItem())
+      expect(activePaneContainers).toEqual([leftDock])
+      expect(activePanes).toEqual([leftDock.getActivePane()])
+      expect(activeItems).toEqual([leftDock.getActivePaneItem()])
+    })
+  })
+
   describe('the grammar-used hook', () => {
     it('fires when opening a file or changing the grammar of an open file', () => {
       let editor = null

@@ -36,6 +36,7 @@ module.exports = class Workspace extends Model {
     this.updateDocumentEdited = this.updateDocumentEdited.bind(this)
     this.didDestroyPaneItem = this.didDestroyPaneItem.bind(this)
     this.didChangeActivePaneItem = this.didChangeActivePaneItem.bind(this)
+    this.didActivatePaneContainer = this.didActivatePaneContainer.bind(this)
     this.didHideDock = this.didHideDock.bind(this)
 
     this.packageManager = params.packageManager
@@ -70,12 +71,16 @@ module.exports = class Workspace extends Model {
     this.defaultDirectorySearcher = new DefaultDirectorySearcher()
     this.consumeServices(this.packageManager)
 
-    this.center = new WorkspaceCenter(this.paneContainer)
+    this.center = new WorkspaceCenter({
+      paneContainer: this.paneContainer,
+      didActivate: this.didActivatePaneContainer
+    })
     this.docks = {
       left: this.createDock('left'),
       right: this.createDock('right'),
       bottom: this.createDock('bottom')
     }
+    this.activePaneContainer = this.center
 
     this.panelContainers = {
       top: new PanelContainer({viewRegistry: this.viewRegistry, location: 'top'}),
@@ -114,14 +119,11 @@ module.exports = class Workspace extends Model {
       deserializerManager: this.deserializerManager,
       notificationManager: this.notificationManager,
       viewRegistry: this.viewRegistry,
-      didHide: this.didHideDock
+      didHide: this.didHideDock,
+      didActivate: this.didActivatePaneContainer
     })
     dock.onDidDestroyPaneItem(this.didDestroyPaneItem)
     return dock
-  }
-
-  didHideDock () {
-    this.getCenter().getActivePane().activate()
   }
 
   reset (packageManager) {
@@ -142,7 +144,10 @@ module.exports = class Workspace extends Model {
     })
     this.paneContainer.onDidDestroyPaneItem(this.didDestroyPaneItem)
 
-    this.center = new WorkspaceCenter(this.paneContainer)
+    this.center = new WorkspaceCenter({
+      paneContainer: this.paneContainer,
+      didActivate: this.didActivatePaneContainer
+    })
     this.docks = {
       left: this.createDock('left'),
       right: this.createDock('right'),
@@ -246,6 +251,31 @@ module.exports = class Workspace extends Model {
     return _.uniq(packageNames)
   }
 
+  didActivatePaneContainer (paneContainer) {
+    if (paneContainer !== this.getActivePaneContainer()) {
+      this.activePaneContainer = paneContainer
+      this.emitter.emit('did-change-active-pane-container', this.activePaneContainer)
+      this.didChangeActivePane(paneContainer, paneContainer.getActivePane())
+    }
+  }
+
+  didChangeActivePane (paneContainer, pane) {
+    if (paneContainer === this.getActivePaneContainer()) {
+      this.emitter.emit('did-change-active-pane', pane)
+      this.didChangeActivePaneItem(pane, pane.getActiveItem())
+    }
+  }
+
+  didChangeActivePaneItem (pane, item) {
+    if (pane === this.getActivePane()) {
+      this.emitter.emit('did-change-active-pane-item', item)
+    }
+  }
+
+  didHideDock () {
+    this.getCenter().activate()
+  }
+
   setHoveredDock (hoveredDock) {
     this.hoveredDock = hoveredDock
     _.values(this.docks).forEach(dock => {
@@ -264,41 +294,41 @@ module.exports = class Workspace extends Model {
     this.onDidChangeActivePaneItem(this.didChangeActivePaneItem)
   }
 
-  didChangeActivePaneItem (item) {
-    this.updateWindowTitle()
-    this.updateDocumentEdited()
-    if (this.activeItemSubscriptions != null) {
-      this.activeItemSubscriptions.dispose()
-    }
-    this.activeItemSubscriptions = new CompositeDisposable()
-
-    let modifiedSubscription, titleSubscription
-
-    if (item != null && typeof item.onDidChangeTitle === 'function') {
-      titleSubscription = item.onDidChangeTitle(this.updateWindowTitle)
-    } else if (item != null && typeof item.on === 'function') {
-      titleSubscription = item.on('title-changed', this.updateWindowTitle)
-      if (titleSubscription == null || typeof titleSubscription.dispose !== 'function') {
-        titleSubscription = new Disposable(() => {
-          item.off('title-changed', this.updateWindowTitle)
-        })
-      }
-    }
-
-    if (item != null && typeof item.onDidChangeModified === 'function') {
-      modifiedSubscription = item.onDidChangeModified(this.updateDocumentEdited)
-    } else if (item != null && typeof item.on === 'function') {
-      modifiedSubscription = item.on('modified-status-changed', this.updateDocumentEdited)
-      if (modifiedSubscription == null || typeof modifiedSubscription.dispose !== 'function') {
-        modifiedSubscription = new Disposable(() => {
-          item.off('modified-status-changed', this.updateDocumentEdited)
-        })
-      }
-    }
-
-    if (titleSubscription != null) { this.activeItemSubscriptions.add(titleSubscription) }
-    if (modifiedSubscription != null) { this.activeItemSubscriptions.add(modifiedSubscription) }
-  }
+  // didChangeActivePaneItem (item) {
+  //   this.updateWindowTitle()
+  //   this.updateDocumentEdited()
+  //   if (this.activeItemSubscriptions != null) {
+  //     this.activeItemSubscriptions.dispose()
+  //   }
+  //   this.activeItemSubscriptions = new CompositeDisposable()
+  //
+  //   let modifiedSubscription, titleSubscription
+  //
+  //   if (item != null && typeof item.onDidChangeTitle === 'function') {
+  //     titleSubscription = item.onDidChangeTitle(this.updateWindowTitle)
+  //   } else if (item != null && typeof item.on === 'function') {
+  //     titleSubscription = item.on('title-changed', this.updateWindowTitle)
+  //     if (titleSubscription == null || typeof titleSubscription.dispose !== 'function') {
+  //       titleSubscription = new Disposable(() => {
+  //         item.off('title-changed', this.updateWindowTitle)
+  //       })
+  //     }
+  //   }
+  //
+  //   if (item != null && typeof item.onDidChangeModified === 'function') {
+  //     modifiedSubscription = item.onDidChangeModified(this.updateDocumentEdited)
+  //   } else if (item != null && typeof item.on === 'function') {
+  //     modifiedSubscription = item.on('modified-status-changed', this.updateDocumentEdited)
+  //     if (modifiedSubscription == null || typeof modifiedSubscription.dispose !== 'function') {
+  //       modifiedSubscription = new Disposable(() => {
+  //         item.off('modified-status-changed', this.updateDocumentEdited)
+  //       })
+  //     }
+  //   }
+  //
+  //   if (titleSubscription != null) { this.activeItemSubscriptions.add(titleSubscription) }
+  //   if (modifiedSubscription != null) { this.activeItemSubscriptions.add(modifiedSubscription) }
+  // }
 
   subscribeToAddedItems () {
     this.onDidAddPaneItem(({item, pane, index}) => {
@@ -400,6 +430,10 @@ module.exports = class Workspace extends Model {
   Section: Event Subscription
   */
 
+  onDidChangeActivePaneContainer (callback) {
+    return this.emitter.on('did-change-active-pane-container', callback)
+  }
+
   // Essential: Invoke the given callback with all current and future text
   // editors in the workspace.
   //
@@ -439,7 +473,7 @@ module.exports = class Workspace extends Model {
   //
   // Returns a {Disposable} on which `.dispose()` can be called to unsubscribe.
   onDidChangeActivePaneItem (callback) {
-    return this.paneContainer.onDidChangeActivePaneItem(callback)
+    return this.emitter.on('did-change-active-pane-item', callback)
   }
 
   // Essential: Invoke the given callback when the active pane item stops
@@ -467,7 +501,10 @@ module.exports = class Workspace extends Model {
   //   * `item` The current active pane item.
   //
   // Returns a {Disposable} on which `.dispose()` can be called to unsubscribe.
-  observeActivePaneItem (callback) { return this.paneContainer.observeActivePaneItem(callback) }
+  observeActivePaneItem (callback) {
+    callback(this.getActivePaneItem())
+    return this.onDidChangActivePaneItem(callback)
+  }
 
   // Essential: Invoke the given callback whenever an item is opened. Unlike
   // {::onDidAddPaneItem}, observers will be notified for items that are already
@@ -546,7 +583,9 @@ module.exports = class Workspace extends Model {
   //   * `pane` A {Pane} that is the current return value of {::getActivePane}.
   //
   // Returns a {Disposable} on which `.dispose()` can be called to unsubscribe.
-  onDidChangeActivePane (callback) { return this.paneContainer.onDidChangeActivePane(callback) }
+  onDidChangeActivePane (callback) {
+    return this.emitter.on('did-change-active-pane', callback)
+  }
 
   // Extended: Invoke the given callback with the current active pane and when
   // the active pane changes.
@@ -556,7 +595,10 @@ module.exports = class Workspace extends Model {
   //   * `pane` A {Pane} that is the current return value of {::getActivePane}.
   //
   // Returns a {Disposable} on which `.dispose()` can be called to unsubscribe.
-  observeActivePane (callback) { return this.paneContainer.observeActivePane(callback) }
+  observeActivePane (callback) {
+    callback(this.getActivePane())
+    return this.onDidChangeActivePane(callback)
+  }
 
   // Extended: Invoke the given callback when a pane item is added to the
   // workspace.
@@ -1070,7 +1112,7 @@ module.exports = class Workspace extends Model {
   //
   // Returns an pane item {Object}.
   getActivePaneItem () {
-    return this.paneContainer.getActivePaneItem()
+    return this.getActivePaneContainer().getActivePaneItem()
   }
 
   // Essential: Get all text editors in the workspace.
@@ -1169,6 +1211,10 @@ module.exports = class Workspace extends Model {
   Section: Panes
   */
 
+  getActivePaneContainer () {
+    return this.activePaneContainer
+  }
+
   // Extended: Get all panes in the workspace.
   //
   // Returns an {Array} of {Pane}s.
@@ -1180,7 +1226,7 @@ module.exports = class Workspace extends Model {
   //
   // Returns a {Pane}.
   getActivePane () {
-    return this.paneContainer.getActivePane()
+    return this.getActivePaneContainer().getActivePane()
   }
 
   // Extended: Make the next pane active.
