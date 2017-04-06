@@ -97,6 +97,9 @@ module.exports = class Workspace extends Model {
 
   initialize () {
     this.paneContainer.initialize()
+    _.values(this.docks).forEach(dock => {
+      dock.initialize()
+    })
   }
 
   getElement () {

@@ -58,6 +58,10 @@ module.exports = class Dock {
     )
   }
 
+  initialize () {
+    this.paneContainer.initialize()
+  }
+
   // This method is called explicitly by the object which adds the Dock to the document.
   elementAttached () {
     // Re-render when the dock is attached to make sure we remeasure sizes defined in CSS.
